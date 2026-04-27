@@ -2,6 +2,8 @@
 
 A production-grade FastAPI service that classifies whether each prior radiology study is **relevant** to a current study for the reading radiologist. Built for the **New Lantern Residency** challenge.
 
+**Live endpoint**: `https://relevant-priors-production-8914.up.railway.app/predict`
+
 > **TL;DR** — POST cases (current study + prior studies) → get one `predicted_is_relevant: bool` per prior. Single batched request handles the full public eval (27,614 priors) in **~0.9 seconds** at **95.50% accuracy**, with **zero skipped predictions**. No LLM. No database. No Redis. Just a deterministic 3-layer cascade + scikit-learn.
 
 ---
@@ -437,11 +439,11 @@ The repo is Railway-ready. After pushing to GitHub:
 4. Healthcheck path is `/healthz` with a 60 s timeout (configured in `railway.toml`).
 5. Restart policy is `ON_FAILURE` with up to 5 retries.
 
-Once deployed, replace `https://<your-railway-domain>` below with the issued URL:
+The current deployment is live at `https://relevant-priors-production-8914.up.railway.app` — verify with:
 
 ```bash
-curl https://<your-railway-domain>/healthz
-curl https://<your-railway-domain>/readyz
+curl https://relevant-priors-production-8914.up.railway.app/healthz
+curl https://relevant-priors-production-8914.up.railway.app/readyz
 ```
 
 ---
