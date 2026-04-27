@@ -32,7 +32,7 @@ A production-grade FastAPI service that classifies whether each prior radiology 
 
 | Metric                                      | Value                              |
 | ------------------------------------------- | ---------------------------------- |
-| Accuracy on public split (case-grouped, 5 seeds avg) | **95.50%**                  |
+| Accuracy on public split (case-grouped, 5 seeds avg) | **95.50%**                |
 | Total predictions returned                  | 27,614 / 27,614 (zero skips)       |
 | End-to-end inference time (full eval)       | **~0.9 s**                         |
 | Container start-up to ready                 | **~3 s**                           |
@@ -278,9 +278,9 @@ Run the cascade against a batch of cases.
 
 | Field                 | Type   | Required | Notes                                                                |
 | --------------------- | ------ | -------- | -------------------------------------------------------------------- |
-| `study_id`            | string | yes      | Echoed back in the prediction. Need not be unique within a case.    |
-| `study_description`   | string | yes      | Free-text radiology description (e.g. `"MRI BRAIN W/O CONTRAST"`).  |
-| `study_date`          | string | yes      | Stored as **string**, not `date` — malformed values are accepted.   |
+| `study_id`            | string | yes      | Echoed back in the prediction. Need not be unique within a case.     |
+| `study_description`   | string | yes      | Free-text radiology description (e.g. `"MRI BRAIN W/O CONTRAST"`).   |
+| `study_date`          | string | yes      | Stored as **string**, not `date` — malformed values are accepted.    |
 
 The schema uses `extra='ignore'` at every level, so unknown fields from the evaluator are silently dropped instead of producing 422.
 
@@ -334,9 +334,9 @@ All configuration is via environment variables. There is **no** `config.py` or Y
 | Env var                | Default       | Description                                                                                              |
 | ---------------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
 | `USE_STUB_PREDICTOR`   | `1`           | When `1`, returns all-False (76% baseline). Set to `0` to load the cascade.                              |
-| `ARTIFACTS_DIR`        | `artifacts`   | Directory containing `lr_model.joblib`, `tfidf_vectorizer.joblib`, and the two pair-stats JSON files.   |
+| `ARTIFACTS_DIR`        | `artifacts`   | Directory containing `lr_model.joblib`, `tfidf_vectorizer.joblib`, and the two pair-stats JSON files.    |
 | `PORT`                 | `8000`        | Port to listen on. Railway sets this automatically.                                                      |
-| `PYTHONPATH`           | repo root     | Must include the repo root so `from src.app.X import Y` resolves. Set automatically in Docker.          |
+| `PYTHONPATH`           | repo root     | Must include the repo root so `from src.app.X import Y` resolves. Set automatically in Docker.           |
 
 If artifacts can't be loaded, the service **falls back to the all-False stub** and continues serving — it doesn't crash on startup. This is a deliberate availability/correctness trade-off.
 
@@ -359,14 +359,14 @@ Expected output:
 
 Test layout:
 
-| File                          | What it covers                                           |
-| ----------------------------- | -------------------------------------------------------- |
-| `tests/test_normalize.py`     | 7 tests — abbrev expansion, modality/region/contrast extraction, canonical-key determinism |
-| `tests/test_features.py`      | 3 tests — vector length, same-string flag, malformed-date safety |
-| `tests/test_schemas.py`       | 3 tests — minimal payload, extra-field tolerance, bad date acceptance |
-| `tests/test_anti_skip.py`     | 3 tests — complete / missing / extra prediction sets    |
-| `tests/test_predictor.py`     | 2 tests — `AllFalsePredictor` correctness                |
-| `tests/test_cascade.py`       | 3 tests — auto-skip when `artifacts/` doesn't exist      |
+| File                          | What it covers                                                                                                                 |
+| ----------------------------- | -----------------------------------------------------------------------------------------------------------------------------  |
+| `tests/test_normalize.py`     | 7 tests — abbrev expansion, modality/region/contrast extraction, canonical-key determinism                                     |
+| `tests/test_features.py`      | 3 tests — vector length, same-string flag, malformed-date safety                                                               |
+| `tests/test_schemas.py`       | 3 tests — minimal payload, extra-field tolerance, bad date acceptance                                                          |
+| `tests/test_anti_skip.py`     | 3 tests — complete / missing / extra prediction sets                                                                           |
+| `tests/test_predictor.py`     | 2 tests — `AllFalsePredictor` correctness                                                                                      |
+| `tests/test_cascade.py`       | 3 tests — auto-skip when `artifacts/` doesn't exist                                                                            |
 | `tests/test_contract.py`      | 9 end-to-end tests via `TestClient` — health, readiness, batch sizing, edge cases (empty priors, duplicate `study_id`, 1000-prior payload, malformed dates) |
 
 ---
@@ -393,12 +393,12 @@ Training on 27614 priors...
 
 What it produces:
 
-| File                             | Size     | Purpose                                              |
-| -------------------------------- | -------- | ---------------------------------------------------- |
-| `artifacts/lr_model.joblib`      | ~30 KB   | Pickled `LogisticRegression(max_iter=2000, solver='liblinear')` |
-| `artifacts/tfidf_vectorizer.joblib` | ~120 KB | Pickled `TfidfVectorizer(analyzer='char_wb', ngram_range=(3,4), min_df=3, max_features=8000)` |
-| `artifacts/raw_pair_stats.json`  | ~900 KB  | `{"current_desc|||prior_desc": {"n": 5, "p": 1.0}, ...}` |
-| `artifacts/canonical_pair_stats.json` | ~160 KB | `{"MR\|HEAD\|WITHOUT|||CT\|HEAD\|WITHOUT": {"n": 12, "p": 0.92}, ...}` |
+| File                                  | Size     | Purpose                                                                                      |
+| ------------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `artifacts/lr_model.joblib`           | ~30 KB   | Pickled `LogisticRegression(max_iter=2000, solver='liblinear')`                              |
+| `artifacts/tfidf_vectorizer.joblib`   | ~120 KB | Pickled `TfidfVectorizer(analyzer='char_wb', ngram_range=(3,4), min_df=3, max_features=8000)` |
+| `artifacts/raw_pair_stats.json`       | ~900 KB  | `{"current_desc|||prior_desc": {"n": 5, "p": 1.0}, ...}`                                     |
+| `artifacts/canonical_pair_stats.json` | ~160 KB | `{"MR\|HEAD\|WITHOUT|||CT\|HEAD\|WITHOUT": {"n": 12, "p": 0.92}, ...}`                        |
 
 `artifacts/` is **gitignored** — the deployment pipeline regenerates it from the JSON, or the Docker image bakes it in via `COPY artifacts/`.
 
@@ -525,16 +525,16 @@ Concrete next-steps with estimated lift floors based on error analysis:
 
 | Layer            | Choice                                | Why                                                                  |
 | ---------------- | ------------------------------------- | -------------------------------------------------------------------- |
-| Language         | Python 3.11                           | Stable, well-supported by every dep below.                          |
-| Web framework    | FastAPI 0.110+                        | Async-friendly, Pydantic-native, OpenAPI for free.                  |
-| Server           | uvicorn (with `[standard]` extras)    | uvloop + httptools for fast HTTP path.                              |
-| Schemas          | Pydantic v2                           | `extra='ignore'`, fast validation, mature ecosystem.                |
-| ML               | scikit-learn 1.3+                     | LogisticRegression + TfidfVectorizer; CPU-only, ships in slim image.|
+| Language         | Python 3.11                           | Stable, well-supported by every dep below.                           |
+| Web framework    | FastAPI 0.110+                        | Async-friendly, Pydantic-native, OpenAPI for free.                   |
+| Server           | uvicorn (with `[standard]` extras)    | uvloop + httptools for fast HTTP path.                               |
+| Schemas          | Pydantic v2                           | `extra='ignore'`, fast validation, mature ecosystem.                 |
+| ML               | scikit-learn 1.3+                     | LogisticRegression + TfidfVectorizer; CPU-only, ships in slim image. |
 | Numerics         | numpy 1.24+ / scipy 1.11+ / pandas 2.0+ | Standard scientific Python; pinned to majors that play nice.       |
-| Persistence      | joblib + JSON                         | Joblib for sklearn estimators, JSON for human-readable lookup tables. |
-| HTTP client      | httpx 0.25+                           | For `scripts/replay_public.py`. Same async story as FastAPI.        |
-| Tests            | pytest 8                              | Industry default. `TestClient` from FastAPI for contract tests.     |
-| Container        | python:3.11-slim                      | Small base; gcc/g++ added only at build time for sklearn wheels.   |
+| Persistence      | joblib + JSON                         | Joblib for sklearn estimators, JSON for human-readable lookup tables.|
+| HTTP client      | httpx 0.25+                           | For `scripts/replay_public.py`. Same async story as FastAPI.         |
+| Tests            | pytest 8                              | Industry default. `TestClient` from FastAPI for contract tests.      |
+| Container        | python:3.11-slim                      | Small base; gcc/g++ added only at build time for sklearn wheels.     |
 | Platform         | Railway (Docker builder)              | Single-config deploy; healthcheck + restart policy in `railway.toml`.|
 
 **Explicitly NOT used (and why):**
