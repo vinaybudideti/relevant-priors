@@ -2,18 +2,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ src/
 COPY artifacts/ artifacts/
+COPY data/ data/
 
 ENV PYTHONPATH=/app
-ENV USE_STUB_PREDICTOR=0
 ENV ARTIFACTS_DIR=/app/artifacts
+ENV USE_STUB_PREDICTOR=0
 
 EXPOSE 8000
 
