@@ -9,9 +9,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ src/
+COPY artifacts/ artifacts/
 
 ENV PYTHONPATH=/app
-ENV USE_STUB_PREDICTOR=1
+ENV USE_STUB_PREDICTOR=0
+ENV ARTIFACTS_DIR=/app/artifacts
 
 EXPOSE 8000
 
