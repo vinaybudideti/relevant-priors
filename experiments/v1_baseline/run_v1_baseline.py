@@ -69,7 +69,7 @@ def main():
         "ship_decision": "baseline",
     }
 
-    save_results(RESULTS_PATH, payload)
+    save_results(payload, RESULTS_PATH)
     print_split_table(splits, title=f"{METHOD_NAME} — 5-seed mean ± std")
     print(f"\nWrote {RESULTS_PATH}")
 
