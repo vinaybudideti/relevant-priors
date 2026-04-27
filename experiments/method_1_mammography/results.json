@@ -10,40 +10,40 @@
   ],
   "splits": {
     "case_grouped": {
-      "cascade_acc_mean": 0.936265948310585,
-      "cascade_acc_std": 0.003336324434937711,
-      "lr_only_acc_mean": 0.9305797582863524,
-      "lr_only_acc_std": 0.004033546036262624,
+      "cascade_acc_mean": 0.9362622606196715,
+      "cascade_acc_std": 0.003246406767193868,
+      "lr_only_acc_mean": 0.9306089083446023,
+      "lr_only_acc_std": 0.003970723247683953,
       "canon_override_acc_mean": 0.967665044421507,
       "canon_override_acc_std": 0.005257907790409209,
       "lift_vs_v1_pp": -0.02
     },
     "curr_desc_holdout": {
-      "cascade_acc_mean": 0.9214559754884807,
-      "cascade_acc_std": 0.013888132985098667,
-      "lr_only_acc_mean": 0.9195018359995364,
-      "lr_only_acc_std": 0.014524322294645715,
+      "cascade_acc_mean": 0.9215041691854804,
+      "cascade_acc_std": 0.013816485207448428,
+      "lr_only_acc_mean": 0.9196743811156931,
+      "lr_only_acc_std": 0.014403735386651292,
       "canon_override_acc_mean": 0.9620320530940061,
       "canon_override_acc_std": 0.017331135471920042,
       "lift_vs_v1_pp": 0.01
     },
     "prior_desc_holdout": {
-      "cascade_acc_mean": 0.9242206424236088,
-      "cascade_acc_std": 0.008489918656935198,
-      "lr_only_acc_mean": 0.9232168415499229,
-      "lr_only_acc_std": 0.008275003647773562,
+      "cascade_acc_mean": 0.9242698854364774,
+      "cascade_acc_std": 0.008328893051590486,
+      "lr_only_acc_mean": 0.9232660845627916,
+      "lr_only_acc_std": 0.008123456494759606,
       "canon_override_acc_mean": 0.9638531508065238,
       "canon_override_acc_std": 0.01060322260189506,
-      "lift_vs_v1_pp": -0.02
+      "lift_vs_v1_pp": -0.03
     },
     "both_desc_holdout": {
-      "cascade_acc_mean": 0.925693256909301,
-      "cascade_acc_std": 0.006040770961797576,
-      "lr_only_acc_mean": 0.9254563645240731,
-      "lr_only_acc_std": 0.004402888109283111,
+      "cascade_acc_mean": 0.9256728202611505,
+      "cascade_acc_std": 0.006124066482713435,
+      "lr_only_acc_mean": 0.9254794759724833,
+      "lr_only_acc_std": 0.004594684177425572,
       "canon_override_acc_mean": 0.9548128006433515,
       "canon_override_acc_std": 0.012325833565838412,
-      "lift_vs_v1_pp": -0.0
+      "lift_vs_v1_pp": 0.01
     }
   },
   "vs_v1_comparison": {
@@ -58,14 +58,14 @@
       "delta_pp": 0.01
     },
     "prior_desc_holdout": {
-      "v1": 0.9244,
-      "method": 0.9242,
-      "delta_pp": -0.02
+      "v1": 0.9246,
+      "method": 0.9243,
+      "delta_pp": -0.03
     },
     "both_desc_holdout": {
-      "v1": 0.9257,
+      "v1": 0.9256,
       "method": 0.9257,
-      "delta_pp": -0.0
+      "delta_pp": 0.01
     }
   },
   "gates": {

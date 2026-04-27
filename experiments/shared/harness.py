@@ -1,19 +1,20 @@
 """Multi-seed × multi-split harness used by every method.
 
-The harness owns the cascade routing logic (raw lookup → canonical lookup →
-model fallback) and the locked thresholds. Each method swaps in:
-  - canonical_key_fn:    str -> str  (controls c_key/p_key columns)
-  - train_predictor_fn:  callable that takes (df_train, X_full, y_full) -> predictor
-  - predict_fn:          callable that takes (predictor, df_test, X_full) -> probas
+Strict §9 contract — each predictor builds its own features per fold:
+  - canonical_key_fn:    str -> str  (controls c_key/p_key columns; harness adds them)
+  - train_predictor_fn:  callable: (df_train) -> trained predictor object
+  - predict_fn:          callable: (predictor, df_test) -> probas ndarray
 
-Methods that only change the canonical key (Methods 1, 2) can rely on the
-default v1 LR train/predict supplied by `make_default_v1_predictor()` below.
-Methods that change the predictor (Methods 3, 4) pass their own pair.
+The harness owns:
+  - data loading
+  - canonical_key column attachment
+  - split / seed loop
+  - cascade routing (raw → canonical → model) with v1's locked thresholds
+  - metrics aggregation
 
-The default uses precomputed engineered + char-wb TF-IDF features over the
-full priors_df (matching the notebook's cell 31 setup). This means TF-IDF
-vocabulary is shared across folds — that's a deliberate match of v1's
-published numbers, not an accident.
+The harness does NOT own feature building. Every predictor (including the v1
+default below) fits its own TfidfVectorizer on the training fold only — there
+is no vocabulary leakage from test into train.
 
 Locked cascade thresholds (DO NOT MODIFY — see PROJECT_ARCHITECTURE §11):
 """
@@ -49,37 +50,48 @@ DEFAULT_SPLITS = (
 )
 
 
-def build_features(df: pd.DataFrame):
-    """Build engineered feature vectors + char-wb (3,4)-gram TF-IDF.
+def default_v1_train(train_df):
+    """v1 LR predictor — fits vectorizer on the training fold ONLY (no leakage).
 
-    Matches src/app/train.py and the notebook's cell 26-27.
+    Returns a dict with the fitted LR and vectorizer for predict_v1 to consume.
     """
     X_eng = np.array([
         feature_vector(r["current_desc"], r["prior_desc"],
                        r["current_date"], r["prior_date"], r["n_priors"])
-        for _, r in df.iterrows()
+        for _, r in train_df.iterrows()
     ], dtype=float)
-    text_corpus = (df["current_desc"].str.upper() + " [SEP] " +
-                   df["prior_desc"].str.upper()).tolist()
-    vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 4),
-                          min_df=3, max_features=8000)
+
+    text_corpus = (train_df["current_desc"].str.upper() + " [SEP] " +
+                   train_df["prior_desc"].str.upper()).tolist()
+    vec = TfidfVectorizer(
+        analyzer="char_wb", ngram_range=(3, 4),
+        min_df=3, max_features=8000,
+    )
     X_text = vec.fit_transform(text_corpus)
+
     X_combined = hstack([csr_matrix(X_eng), X_text]).tocsr()
-    return X_combined
+    y = train_df["label"].values.astype(int)
+
+    lr = LogisticRegression(max_iter=2000, solver="liblinear")
+    lr.fit(X_combined, y)
+
+    return {"lr": lr, "vec": vec}
 
 
-def default_v1_train(df_train, X_full, y_full):
-    """v1's predictor: LogisticRegression on engineered + TF-IDF features."""
-    idx = df_train.index.values
-    clf = LogisticRegression(max_iter=2000, solver="liblinear")
-    clf.fit(X_full[idx], y_full[idx])
-    return clf
+def default_v1_predict(predictor, test_df):
+    """Return P(label=True) for each row in test_df, using a vectorizer fit on train."""
+    X_eng = np.array([
+        feature_vector(r["current_desc"], r["prior_desc"],
+                       r["current_date"], r["prior_date"], r["n_priors"])
+        for _, r in test_df.iterrows()
+    ], dtype=float)
 
+    text_corpus = (test_df["current_desc"].str.upper() + " [SEP] " +
+                   test_df["prior_desc"].str.upper()).tolist()
+    X_text = predictor["vec"].transform(text_corpus)
 
-def default_v1_predict(clf, df_test, X_full):
-    """Return P(label=True) for each row in df_test."""
-    idx = df_test.index.values
-    return clf.predict_proba(X_full[idx])[:, 1]
+    X_combined = hstack([csr_matrix(X_eng), X_text]).tocsr()
+    return predictor["lr"].predict_proba(X_combined)[:, 1]
 
 
 def _apply_cascade(train_df: pd.DataFrame, test_df: pd.DataFrame,
@@ -130,18 +142,11 @@ def run_full_eval(
 ):
     """Run the full 5-seed × 4-split harness for one method.
 
-    Returns a dict matching the `splits` key in the §7 results.json schema:
-    {
-      "case_grouped": {
-        "cascade_acc_mean": 0.9412, "cascade_acc_std": 0.0028,
-        "lr_only_acc_mean": 0.9306, "lr_only_acc_std": 0.0040,
-        "canon_override_acc_mean": 0.9712, "canon_override_acc_std": 0.0015,
-      },
-      ...
-    }
+    Strict §9 signatures:
+      train_predictor_fn(df_train) -> predictor
+      predict_fn(predictor, df_test) -> ndarray of P(label=True)
 
-    `lift_vs_v1_pp` is filled in by the per-method run script after loading
-    v1_baseline/results.json — the harness does not know about v1 here.
+    Returns the `splits` dict matching the §7 results.json schema.
     """
     if train_predictor_fn is None:
         train_predictor_fn = default_v1_train
@@ -151,9 +156,6 @@ def run_full_eval(
     df = load_priors_df(data_path)
     df["c_key"] = df["current_desc"].map(canonical_key_fn)
     df["p_key"] = df["prior_desc"].map(canonical_key_fn)
-
-    X_combined = build_features(df)
-    y_all = df["label"].values.astype(int)
 
     seeds = tuple(seeds)
     splits = tuple(splits)
@@ -170,10 +172,10 @@ def run_full_eval(
             tr_df, te_df = split_fn(df, seed)
             if len(te_df) < 100:
                 continue
-            y_te = y_all[te_df.index.values]
+            y_te = te_df["label"].values.astype(int)
 
-            predictor = train_predictor_fn(tr_df, X_combined, y_all)
-            proba = predict_fn(predictor, te_df, X_combined)
+            predictor = train_predictor_fn(tr_df)
+            proba = predict_fn(predictor, te_df)
 
             preds, layer = _apply_cascade(tr_df, te_df, proba)
             model_pred = (proba >= 0.5)
