@@ -4,7 +4,7 @@ A production-grade FastAPI service that classifies whether each prior radiology 
 
 **Live endpoint**: `https://relevant-priors-production-8914.up.railway.app/predict`
 
-> **TL;DR** — POST cases (current study + prior studies) → get one `predicted_is_relevant: bool` per prior. Single batched request handles the full public eval (27,614 priors) in **~0.9 seconds** at **95.50% accuracy**, with **zero skipped predictions**. No LLM. No database. No Redis. Just a deterministic 3-layer cascade + scikit-learn.
+> **TL;DR** — POST cases (current study + prior studies) → get one `predicted_is_relevant: bool` per prior. Single batched request handles the full public eval (27,614 priors) in **~0.9s local / 3.8s over Railway** at **95.50% accuracy**, with **zero skipped predictions**. No LLM. No database. No Redis. Just a deterministic 3-layer cascade + scikit-learn.
 
 ---
 
@@ -115,7 +115,9 @@ All numbers are mean across **5 deterministic seeds** on the public 996-case spl
 
 The cascade lift is small but **positive on every split** (it's not just adding noise). On the public-as-train, public-as-test scenario used by `scripts/replay_public.py`, the same code achieves **95.50%** because the pair-lookup tables have full coverage of the input.
 
-Full experimental write-up — including baselines (default-false 76%, default-true 54%), normalization-lift breakdown by split, and override accuracy/lift analysis — lives in [`experiments.md`](./experiments.md).
+### Experiments and Findings
+
+The architecture was locked through 7 phases of empirical verification before any production code was written. After v1 deployment, four candidate improvements were measured in isolation against the v1 baseline using a 5-seed × 4-split harness with strict per-fold cross-validation. All four methods were rejected by a strict pre-declared acceptance gate, but two model-layer methods (M3 GBT ensemble and M4 sample weighting) revealed a structural property of the cascade: case_grouped accuracy is capped at the override layer, while drift-split accuracy is capped at the model layer. The cascade absorbs model-layer improvements on case_grouped specifically. Full methodology, per-method results, performance tables, deployment incident report, and decision rationale are in [experiments.md](experiments.md).
 
 ---
 
@@ -509,17 +511,22 @@ The non-obvious decisions baked into this submission:
 
 ## Future Improvements
 
-Concrete next-steps with estimated lift floors based on error analysis:
+In priority order, based on what the experiments phase measured:
 
-1. **Mammography canonical key refinement** (+0.76 pp). Mammography accounts for 12% of cascade errors. Adding laterality (`LEFT`/`RIGHT`/`BILATERAL`) and screening-vs-diagnostic flags to the canonical key would address the largest error bucket.
+### 1. Resolve the M3 question with private-split evidence
+The M3 LR + GBT ensemble was rejected by the strict acceptance gate (case_grouped lift +0.02 pp) but lifted every drift split (+0.10 to +0.16 pp on cascade; +0.23 to +0.27 pp on the LR/ensemble layer alone). If private-split feedback indicates drift weakness, M3 integration becomes empirically motivated. The integration path is straightforward: `train.py` adds a `HistGradientBoostingClassifier` on the engineered features, `cascade.py` averages probabilities at the model layer.
 
-2. **XR view-pattern detection** (+0.42 pp). Plain radiographs without `"XR"` tokens (e.g. `"CHEST 2 VIEW FRONTAL & LATRL"`) account for 6.6% of errors. View-pattern regex + radiographic-region taxonomy would close this.
+### 2. Re-design the acceptance gate for model-layer methods
+The gate (case_grouped lift ≥ +0.10 pp) embeds an assumption that the cascade is symmetric across split types. The experiments phase falsified this. A revised gate for model-layer methods: drift-split mean lift ≥ +0.10 pp AND case_grouped does not regress. Documented as future work to avoid post-hoc rationalization for this submission.
 
-3. **Vascular / Doppler / Echo / DXA disambiguation** (~5% of errors combined). Smaller per-modality buckets that are individually narrow but worth one batched fix.
+### 3. Mammography canonical key refinement at higher data volume
+M1 was rejected because the refined canonical key fragmented the pair-statistics table on the 996-case public split. With a larger training corpus, the n ≥ 10 override threshold may be reachable for refined keys. Worth revisiting if the project moves to a larger labeled dataset.
 
-4. **Bounded LLM disambiguation.** For predictions in the 0.40–0.60 probability band only (≈3% of rows), a *batched-per-case* LLM call could capture cross-modality semantic edges (e.g. CT angio coronary ↔ XR chest cardiac workup) that the rules and model both miss. Strict per-request deadline guard, cached by canonical-pair key.
+### 4. Adversarial drift testing
+Current drift simulation tests vocabulary drift only. A more rigorous evaluation would simulate temporal drift, modality-balance drift, and prior-list-length drift.
 
-5. **Per-modality threshold tuning.** Currently using a global threshold of 0.5. Modality-cluster-specific thresholds may capture asymmetric clinical loss (e.g. missing a relevant prior is worse than including an irrelevant one).
+### 5. Bounded LLM disambiguation for the residual uncertainty band
+For predictions where the cascade probability is in [0.40, 0.60], a batched-per-case LLM call could capture cross-modality semantic edges that rules and the linear/GBT models miss. Deliberately not built in v1 because of operational risk and unmeasured behavior.
 
 ---
 
