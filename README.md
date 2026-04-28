@@ -515,7 +515,7 @@ The non-obvious decisions baked into this submission:
 
 - **Single batched inference.** The LR model runs **once per request**, on all model-fallback rows at once via `predict_proba`. There's no per-item Python loop into scikit-learn.
 
-- **Failure-contained startup path.** If `USE_STUB_PREDICTOR=1` or the `artifacts/` directory does not exist at startup, the service falls back to `AllFalsePredictor` (76% baseline) and starts serving. If artifact files exist but fail to load (e.g., corrupted joblib), startup currently fails — corrupt-artifact fallback is documented as future work in this README.
+- **Failure-contained startup path.** If `USE_STUB_PREDICTOR=1` or the `artifacts/` directory does not exist at startup, the service falls back to `AllFalsePredictor` (76% baseline) and starts serving. If artifact files exist but fail to load (e.g., corrupted joblib or malformed JSON), the lifespan catches the error, logs it under `predictor_init_failed`, and falls back to `AllFalsePredictor` so the endpoint still returns contract-valid responses. The failure is loud in logs so an operator can detect and repair the artifacts.
 
 - **Lazy import of the cascade.** `main.py` imports `cascade.py` *inside* the `lifespan` block, only when `USE_STUB_PREDICTOR=0`. This makes module-level imports fast and lets the stub mode boot without joblib/sklearn touching disk.
 

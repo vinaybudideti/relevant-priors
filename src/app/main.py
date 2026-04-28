@@ -25,13 +25,27 @@ async def lifespan(app: FastAPI):
     use_stub = os.environ.get('USE_STUB_PREDICTOR', '1') == '1'
 
     if use_stub or not Path(artifacts_dir).exists():
-        log_event('predictor_init', kind='stub_all_false')
+        log_event('predictor_init', kind='stub_all_false',
+                  reason='use_stub' if use_stub else 'artifacts_dir_missing')
         PREDICTOR = AllFalsePredictor()
     else:
-        # Cascade predictor will be added in Chunk 5
         from .cascade import CascadePredictor
-        log_event('predictor_init', kind='cascade', artifacts_dir=artifacts_dir)
-        PREDICTOR = CascadePredictor(artifacts_dir)
+        try:
+            PREDICTOR = CascadePredictor(artifacts_dir)
+            log_event('predictor_init', kind='cascade', artifacts_dir=artifacts_dir)
+        except Exception as e:
+            # Corrupt or unreadable artifacts: fall back loudly to stub.
+            # Preserves endpoint contract (no skips, default-false) rather
+            # than failing startup. Failure is logged so the operator can
+            # detect and repair.
+            log_event('predictor_init_failed',
+                      kind='cascade',
+                      artifacts_dir=artifacts_dir,
+                      error_type=type(e).__name__,
+                      error_message=str(e)[:200])
+            log_event('predictor_init', kind='stub_all_false',
+                      reason='cascade_load_failed')
+            PREDICTOR = AllFalsePredictor()
 
     READY = True
     log_event('startup_complete')
