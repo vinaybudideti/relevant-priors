@@ -9,6 +9,7 @@ ABBREV = [
     (r'\bMAM\b', 'MAMMOGRAPHY'), (r'\bMAMMO\b', 'MAMMOGRAPHY'),
     (r'\bABD\b', 'ABDOMEN'), (r'\bPEL\b', 'PELVIS'),
     (r'\bMRI\b', 'MR'),
+    (r'\bDXA\b', 'DEXA'),
     (r'\bUS\b', 'ULTRASOUND'),
     (r'\bXR\b', 'XRAY'), (r'\bX-RAY\b', 'XRAY'),
     (r'\bECHO\b', 'ECHOCARDIOGRAM'), (r'\bTTE\b', 'ECHOCARDIOGRAM'),
@@ -48,8 +49,36 @@ def normalize(s: str) -> str:
     return ' '.join(t.split())
 
 
+# Order matters: longer/more-specific tokens must be checked before shorter
+# ones that would match as substrings. The original MODALITY_TOKENS dict
+# above is preserved for documentation, but extract_modality uses this
+# explicit priority list to avoid CTA->CT, MRA->MR, PET/CT->CT misclassification.
+_MODALITY_PRIORITY = [
+    ('PET',         ['PET', 'FDG']),     # PET first so PET/CT resolves to PET
+    ('CTA',         ['CTA']),             # before CT
+    ('MRA',         ['MRA']),             # before MR
+    ('MAMMOGRAPHY', ['MAMMOGRAPHY']),     # before MR (MAMMOGRAPHY contains 'MR')
+    ('ECHO',        ['ECHOCARDIOGRAM']),
+    ('ULTRASOUND',  ['ULTRASOUND']),
+    ('DEXA',        ['DEXA']),
+    ('XRAY',        ['XRAY']),
+    ('NM',          ['NM', 'SCINT']),
+    ('CT',          ['CT']),              # catch-all, after the more-specific ones
+    ('MR',          ['MR']),              # catch-all
+]
+
+
 def extract_modality(normed: str) -> str:
-    for canon, toks in MODALITY_TOKENS.items():
+    """Return canonical modality, checking longer/more-specific tokens first.
+
+    Resolution order is deliberate:
+      1. PET (catches 'PET' and 'PET/CT' before CT can match)
+      2. CTA, MRA (before CT, MR)
+      3. MAMMOGRAPHY (before MR — 'MAMMOGRAPHY' contains the substring 'MR')
+      4. ECHO, ULTRASOUND, DEXA, XRAY, NM (specific modalities)
+      5. CT, MR (catch-all)
+    """
+    for canon, toks in _MODALITY_PRIORITY:
         for tok in toks:
             if tok in normed:
                 return canon
