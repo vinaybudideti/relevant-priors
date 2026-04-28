@@ -25,13 +25,27 @@ async def lifespan(app: FastAPI):
     use_stub = os.environ.get('USE_STUB_PREDICTOR', '1') == '1'
 
     if use_stub or not Path(artifacts_dir).exists():
-        log_event('predictor_init', kind='stub_all_false')
+        log_event('predictor_init', kind='stub_all_false',
+                  reason='use_stub' if use_stub else 'artifacts_dir_missing')
         PREDICTOR = AllFalsePredictor()
     else:
-        # Cascade predictor will be added in Chunk 5
         from .cascade import CascadePredictor
-        log_event('predictor_init', kind='cascade', artifacts_dir=artifacts_dir)
-        PREDICTOR = CascadePredictor(artifacts_dir)
+        try:
+            PREDICTOR = CascadePredictor(artifacts_dir)
+            log_event('predictor_init', kind='cascade', artifacts_dir=artifacts_dir)
+        except Exception as e:
+            # Corrupt or unreadable artifacts: fall back loudly to stub.
+            # Preserves endpoint contract (no skips, default-false) rather
+            # than failing startup. Failure is logged so the operator can
+            # detect and repair.
+            log_event('predictor_init_failed',
+                      kind='cascade',
+                      artifacts_dir=artifacts_dir,
+                      error_type=type(e).__name__,
+                      error_message=str(e)[:200])
+            log_event('predictor_init', kind='stub_all_false',
+                      reason='cascade_load_failed')
+            PREDICTOR = AllFalsePredictor()
 
     READY = True
     log_event('startup_complete')
@@ -58,18 +72,18 @@ async def readyz():
 async def predict(req: PredictRequest, request: Request):
     new_request_id()
     t0 = time.time()
-    log_event('predict_start',
-              cases=len(req.cases),
-              total_priors=sum(len(c.prior_studies) for c in req.cases))
 
-    by_key = {}
-    keys_in_order = []
-    items = []
+    # Index-preserving storage. We intentionally avoid (case_id, study_id) dict
+    # keys because two priors in the same case may share a study_id; dict-keyed
+    # storage would collapse them silently.
+    row_meta = []   # (case_id, study_id) tuples in input order
+    row_preds = []  # per-row bool, default-false
+    items = []      # predictor input dicts in matching order
+
     for c in req.cases:
         for p in c.prior_studies:
-            key = (c.case_id, p.study_id)
-            by_key[key] = DEFAULT_FALLBACK
-            keys_in_order.append(key)
+            row_meta.append((c.case_id, p.study_id))
+            row_preds.append(DEFAULT_FALLBACK)
             items.append({
                 'current_desc': c.current_study.study_description,
                 'prior_desc':   p.study_description,
@@ -78,34 +92,34 @@ async def predict(req: PredictRequest, request: Request):
                 'n_priors':     len(c.prior_studies),
             })
 
+    log_event('predict_start',
+              cases=len(req.cases),
+              total_priors=len(items))
+
     try:
         preds = PREDICTOR.predict_batch(items)
-        for k, v in zip(keys_in_order, preds):
-            by_key[k] = bool(v)
+        if len(preds) == len(row_preds):
+            row_preds = [bool(v) for v in preds]
+        else:
+            log_event('predictor_length_mismatch',
+                      expected=len(row_preds), got=len(preds))
     except Exception as e:
         log_event('predictor_error', error=type(e).__name__)
 
     predictions = [
-        Prediction(case_id=cid, study_id=sid,
-                   predicted_is_relevant=by_key[(cid, sid)])
-        for (cid, sid) in keys_in_order
+        Prediction(case_id=cid, study_id=sid, predicted_is_relevant=pred)
+        for (cid, sid), pred in zip(row_meta, row_preds)
     ]
 
     try:
         assert_no_skips(req.cases, predictions)
     except AntiSkipError as e:
         log_event('anti_skip_violation', error=str(e))
-        # Repair
-        repaired = []
-        for c in req.cases:
-            for p in c.prior_studies:
-                k = (c.case_id, p.study_id)
-                repaired.append(Prediction(
-                    case_id=c.case_id,
-                    study_id=p.study_id,
-                    predicted_is_relevant=by_key.get(k, DEFAULT_FALLBACK)
-                ))
-        predictions = repaired
+        # Repair from the row-indexed state
+        predictions = [
+            Prediction(case_id=cid, study_id=sid, predicted_is_relevant=pred)
+            for (cid, sid), pred in zip(row_meta, row_preds)
+        ]
 
     elapsed_ms = int((time.time() - t0) * 1000)
     log_event('predict_done', predictions=len(predictions), elapsed_ms=elapsed_ms)

@@ -180,7 +180,7 @@ Two normalizer-only methods (M1, M2) and two model-layer methods (M3, M4) produc
 
 The pattern is consistent and explained by the cascade structure. On `case_grouped`, raw-pair and canonical-pair lookups have high coverage when train and test descriptions overlap, so the override layers fire on most rows. Improvements at the model layer barely surface because the model only handles the residual minority. On drift splits, the override layers have low coverage by construction — the held-out descriptions are unseen — and the model layer carries most of the inference load. That's where model-layer improvements show up.
 
-Two independent model-layer interventions producing the same fingerprint at different magnitudes is not noise. It is a structural property of this cascade design: **the cascade caps `case_grouped` accuracy at the override layer and caps drift-split accuracy at the model layer.**
+Two independent model-layer interventions producing the same fingerprint at different magnitudes is not noise. It is a structural property of this cascade design: case_grouped performance is mostly override-limited, while drift-split performance is more model-limited. The cascade's gating decisions cap how much a model-layer improvement can surface on case_grouped, which is why M3 and M4 produce flat case_grouped lift despite improving the LR/ensemble layer significantly on drift splits.
 
 This finding has consequences for future gate design. The strict gate (case-grouped lift ≥ +0.10 pp) was set before data arrived and turned out to embed an assumption — that the cascade is symmetric across split types — which the experiments phase falsified. A revised gate that targets drift-split mean lift while requiring `case_grouped` not to regress would have admitted M3. The redesign is documented as future work; the gate was not changed retroactively for this submission.
 
@@ -188,17 +188,17 @@ This finding has consequences for future gate design. The strict gate (case-grou
 
 All four methods were skipped by the strict gate. The v1 cascade ships as deployed at the live endpoint URL.
 
-The decision honors a methodology principle: gates set before data arrives must not be relaxed after data arrives, no matter how defensible the post-hoc reason. The structural finding from M3 and M4 — that the model layer has real headroom on novel descriptions which the cascade absorbs on case-grouped — is recorded here and used to inform future gate design rather than to override this gate.
+Because the acceptance gate was pre-declared before any method ran, I kept the production decision tied to it rather than relaxing it after seeing the results. The structural finding from M3 and M4 is documented for future gate design rather than used to override this gate.
 
 If the private score lands materially below the drift-split range observed in validation (especially below approximately 92.5%), M3 integration becomes worth reconsidering as a follow-up submission.
 
 ## Limitations
 
-**Label noise on the public split.** Pair-determinism analysis: 98.21% of unique `(current_desc, prior_desc)` pairs in the public split have 100% consistent labels, but a small minority do not — the same pair was sometimes labeled True and sometimes False by the underlying labeling process. Oracle accuracy (always pick majority label per pair, applied to the full public split as both train and test) tops out at 98.84%. A small fraction of public is mathematically unrecoverable by any pair-based classifier on this data alone.
+**Label noise on the public split.** Pair-determinism analysis: 98.21% of unique `(current_desc, prior_desc)` pairs in the public split have 100% consistent labels, but a small minority do not — the same pair was sometimes labeled True and sometimes False by the underlying labeling process. Oracle accuracy (always pick majority label per pair, applied to the full public split as both train and test) tops out at 98.84%. A small fraction of public is not recoverable from description-pair features alone by any pair-based classifier on this data alone.
 
 **Drift simulation covers vocabulary only.** The four split types test vocabulary drift only. They do not simulate temporal drift, hospital drift, modality-balance shifts, or adversarial inputs. Private-split performance depends on which kinds of drift the private data exhibits, and we have no advance signal.
 
-**Feature extraction tolerates schema malformations but doesn't fix them.** Pydantic accepts extra fields and malformed dates, but `feature_vector` defaults `gap = 0` on date-parse failure. A real request with a malformed `prior_date` will be predicted with date features zeroed, which can shift the LR decision on borderline rows.
+**Feature extraction tolerates schema malformations but doesn't fix them.** Pydantic accepts extra fields and malformed dates, and `feature_vector` defaults the date-gap feature to `0` if parsing fails instead of rejecting the request. This preserves the endpoint contract and avoids skipped predictions, but it can reduce accuracy when date gap would otherwise have been informative.
 
 **LR + GBT inference time is roughly 2× LR alone.** If M3 were integrated, the ensemble would roughly double the model-layer compute. With current request sizes (3.8 s for 27,614 priors), there is large headroom under the 360 s timeout. At larger request sizes the headroom shrinks.
 
@@ -244,7 +244,7 @@ python scripts/replay_public.py \
 
 ## Reproducing The Experiments Phase
 
-The four-method comparison lives under `experiments/` and uses a shared harness with strict per-fold cross-validation. Production code under `src/app/` is never touched by the experiments. Each runner writes its own `results.json`; `experiments/DECISION.md` summarizes across methods.
+The four-method comparison lives under `experiments/` in the working repository, separate from the production code under `src/app/`. The `experiments/` tree is not included in the submission zip because the production endpoint does not depend on it; the per-method numbers cited above were captured into this write-up directly. To rerun the methods, the `experiments/` directory must be obtained separately. Each method runner writes its own `results.json`, and `experiments/DECISION.md` summarizes across methods.
 
 ```bash
 python -m experiments.v1_baseline.run_v1_baseline

@@ -34,14 +34,15 @@ A production-grade FastAPI service that classifies whether each prior radiology 
 
 | Metric                                      | Value                              |
 | ------------------------------------------- | ---------------------------------- |
-| Accuracy on public split (case-grouped, 5 seeds avg) | **95.50%**                |
+| Accuracy on full public replay (train+evaluate on full public)        | **95.50%**           |
+| Accuracy on case-grouped 5-seed cross-validation                      | **93.64%**           |
 | Total predictions returned                  | 27,614 / 27,614 (zero skips)       |
 | End-to-end inference time (full eval)       | **~0.9 s**                         |
 | Container start-up to ready                 | **~3 s**                           |
 | Image size                                  | ~270 MB (python:3.11-slim base)    |
 | External dependencies at runtime            | **None** (no DB, no Redis, no LLM) |
-| Test count                                  | 30 (all passing)                   |
-| Lines of production code                    | ~330 across 10 modules             |
+| Test count                                  | 30 (27 unit + 3 cascade-integration; cascade tests skip until artifacts are trained)  |
+| Lines of production code                    | ~590 across 10 modules             |
 
 ---
 
@@ -52,7 +53,7 @@ Given a radiology *case* — a current imaging study and a list of N prior studi
 - Return **exactly one prediction per prior** (zero skips, ever).
 - Tolerate evaluator schema drift (extra fields, malformed dates).
 - Never log PHI (`patient_name`, `patient_id`, `mrn`).
-- Default to `false` when uncertain — empirical work showed default-true gives only 54% accuracy on the public split.
+- Default to `false` when uncertain — pure default-true achieves only 23% accuracy on the public split (relevant rate is 23.78%); even raw-pair lookup with default-true on misses only reaches 54%, which is decisively worse than default-false.
 
 The challenge constraints rule out per-call LLM inference for cost and latency reasons.
 
@@ -115,6 +116,15 @@ All numbers are mean across **5 deterministic seeds** on the public 996-case spl
 
 The cascade lift is small but **positive on every split** (it's not just adding noise). On the public-as-train, public-as-test scenario used by `scripts/replay_public.py`, the same code achieves **95.50%** because the pair-lookup tables have full coverage of the input.
 
+### Reading the headline numbers
+
+This README quotes two distinct accuracy numbers that mean different things:
+
+- **95.50%** is the full-public replay metric. The model is trained on the full 996-case public split, then the same split is replayed against the live endpoint to verify the contract end-to-end. This is what the live URL produces and what the Highlights table reports.
+- **93.64%** is the case-grouped 5-seed cross-validation metric. The model is trained on 80% of cases and evaluated on the held-out 20%, repeated across five seeds. This is the more conservative estimate of generalization to unseen cases from the same distribution.
+
+The 1.86pp gap between the two is expected: pair-statistic lookups have full coverage when train and test overlap, which lifts the cascade above its true cross-validation accuracy. Neither number is a projection of private-split accuracy, which is unknown until evaluation.
+
 ### Experiments and Findings
 
 The architecture was locked through 7 phases of empirical verification before any production code was written. After v1 deployment, four candidate improvements were measured in isolation against the v1 baseline using a 5-seed × 4-split harness with strict per-fold cross-validation. All four methods were rejected by a strict pre-declared acceptance gate, but two model-layer methods (M3 GBT ensemble and M4 sample weighting) revealed a structural property of the cascade: case_grouped accuracy is capped at the override layer, while drift-split accuracy is capped at the model layer. The cascade absorbs model-layer improvements on case_grouped specifically. Full methodology, per-method results, performance tables, deployment incident report, and decision rationale are in [experiments.md](experiments.md).
@@ -162,7 +172,7 @@ relevant-priors/
 │   ├── raw_pair_stats.json           Raw-pair lookup table.
 │   └── canonical_pair_stats.json     Canonical-pair lookup table.
 │
-├── Dockerfile                        Multi-stage build with COPY artifacts/ baked in.
+├── Dockerfile                        Single-stage build that trains artifacts inside the image via RUN python -m src.app.train.
 ├── railway.toml                      Railway deploy config (DOCKERFILE builder).
 ├── requirements.txt                  Python dependencies, version-pinned.
 ├── .gitignore                        Excludes artifacts/, .venv/, __pycache__/, etc.
@@ -355,10 +365,16 @@ The full suite covers normalization, feature engineering, Pydantic schemas, the 
 pytest tests/ -x -v
 ```
 
-Expected output:
+Expected output, cold clone (before training artifacts):
 
 ```
-============================== 30 passed in 0.5s ==============================
+============================== 27 passed, 3 skipped in ~0.5s ==============================
+```
+
+After running `python -m src.app.train --input data/relevant_priors_public.json --out artifacts/`:
+
+```
+============================== 30 passed in ~0.7s ==============================
 ```
 
 Test layout:
@@ -404,7 +420,7 @@ What it produces:
 | `artifacts/raw_pair_stats.json`       | ~900 KB  | `{"current_desc|||prior_desc": {"n": 5, "p": 1.0}, ...}`                                     |
 | `artifacts/canonical_pair_stats.json` | ~160 KB | `{"MR\|HEAD\|WITHOUT|||CT\|HEAD\|WITHOUT": {"n": 12, "p": 0.92}, ...}`                        |
 
-`artifacts/` is **gitignored** — the deployment pipeline regenerates it from the JSON, or the Docker image bakes it in via `COPY artifacts/`.
+`artifacts/` is **gitignored**. The Docker build trains artifacts inside the image at build time via `RUN python -m src.app.train`, which guarantees artifacts and the runtime sklearn version share the same Python environment.
 
 ---
 
@@ -491,7 +507,7 @@ The non-obvious decisions baked into this submission:
 
 - **PHI handling.** `patient_name` and `patient_id` are accepted by the schema (so the evaluator can include them), but are filtered out at the *log formatter* level via `PHI_BLACKLIST = {'patient_name', 'patient_id', 'mrn'}`. They never appear in any structured log line. Verified by post-run grep on every uvicorn log generated during development.
 
-- **Anti-skip invariant.** Every `(case_id, study_id)` is initialized with `predicted_is_relevant = false` before the predictor is invoked. Predictor failures preserve those defaults rather than dropping rows. A final `assert_no_skips(...)` runs before the response is built; if it fails, a repair path reconstructs the response from the `by_key` map. Skipping a prediction is **structurally impossible**, even under arbitrary predictor exceptions.
+- **Anti-skip invariant.** Every `(case_id, study_id)` is initialized with `predicted_is_relevant = false` before the predictor is invoked. Predictor failures preserve those defaults rather than dropping rows. A final `assert_no_skips(...)` runs before the response is built; if it fails, a repair path reconstructs the response from the `by_key` map. The defaults-plus-assert-and-repair pattern means skipped predictions have not been observed across the full 27,614-prior public replay or any tested failure mode. The invariant is enforced at three layers: initialization, predict-error fallback, and final assert/repair.
 
 - **Schema flexibility.** Pydantic models use `model_config = ConfigDict(extra='ignore')` everywhere. Evaluator-side schema additions never produce 422.
 
@@ -499,7 +515,7 @@ The non-obvious decisions baked into this submission:
 
 - **Single batched inference.** The LR model runs **once per request**, on all model-fallback rows at once via `predict_proba`. There's no per-item Python loop into scikit-learn.
 
-- **Graceful degradation.** If `artifacts/` is missing or unreadable at startup, the service silently falls back to `AllFalsePredictor` (76% baseline) and starts serving. It does not crash. This is a deliberate availability choice.
+- **Failure-contained startup path.** If `USE_STUB_PREDICTOR=1` or the `artifacts/` directory does not exist at startup, the service falls back to `AllFalsePredictor` (76% baseline) and starts serving. If artifact files exist but fail to load (e.g., corrupted joblib or malformed JSON), the lifespan catches the error, logs it under `predictor_init_failed`, and falls back to `AllFalsePredictor` so the endpoint still returns contract-valid responses. The failure is loud in logs so an operator can detect and repair the artifacts.
 
 - **Lazy import of the cascade.** `main.py` imports `cascade.py` *inside* the `lifespan` block, only when `USE_STUB_PREDICTOR=0`. This makes module-level imports fast and lets the stub mode boot without joblib/sklearn touching disk.
 

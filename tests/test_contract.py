@@ -110,3 +110,32 @@ def test_stub_returns_all_false():
         assert r.status_code == 200
         for p in r.json()['predictions']:
             assert p['predicted_is_relevant'] is False
+
+
+def test_duplicate_study_id_in_same_case_preserves_both_rows():
+    """Regression: two priors in the same case sharing a study_id must each
+    get their own slot in the response, not be collapsed by dict key.
+    """
+    payload = {
+        "cases": [{
+            "case_id": "c1",
+            "current_study": {
+                "study_id": "cur",
+                "study_description": "MRI BRAIN",
+                "study_date": "2024-01-01"
+            },
+            "prior_studies": [
+                {"study_id": "dup", "study_description": "CT HEAD",
+                 "study_date": "2023-01-01"},
+                {"study_id": "dup", "study_description": "XR CHEST",
+                 "study_date": "2023-06-01"},
+            ]
+        }]
+    }
+    with TestClient(app) as client:
+        r = client.post("/predict", json=payload)
+    assert r.status_code == 200
+    preds = r.json()["predictions"]
+    assert len(preds) == 2, f"Expected 2 predictions for 2 priors, got {len(preds)}"
+    assert preds[0]["case_id"] == "c1" and preds[0]["study_id"] == "dup"
+    assert preds[1]["case_id"] == "c1" and preds[1]["study_id"] == "dup"
