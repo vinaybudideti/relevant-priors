@@ -2,7 +2,7 @@
 
 ## Summary
 
-This submission implements a deterministic 3-layer cascade for the relevant-prior classification task: raw exact-pair lookup, then a normalized canonical-key lookup, then a logistic regression model trained on engineered features and char n-grams. The service is live at `https://relevant-priors-production-8914.up.railway.app/predict`. A full public-eval replay against the live endpoint reports 26,372 correct / 1,242 incorrect / 0 skipped over 27,614 priors (95.50% accuracy, 3.8s round-trip). The work was sequenced as a 7-phase verification before architecture lock, followed by an isolated 4-method exploration with a strict pre-declared acceptance gate. Private-split performance is unknown until evaluation.
+This submission implements a deterministic 3-layer cascade for the relevant-prior classification task: raw exact-pair lookup, then a normalized canonical-key lookup, then a logistic regression model trained on engineered features and char n-grams. The service is live at `https://relevant-priors-production-8914.up.railway.app/predict`. A full public-eval replay against the live endpoint reports 26,379 correct / 1,235 incorrect / 0 skipped over 27,614 priors (95.53% accuracy, 3.8s round-trip). The work was sequenced as a 7-phase verification before architecture lock, followed by an isolated 4-method exploration with a strict pre-declared acceptance gate. Private-split performance is unknown until evaluation.
 
 ## Architecture
 
@@ -97,7 +97,7 @@ Three issues were caught and fixed during deployment to Railway. Recorded becaus
 
 **Issue 3 — Port hardcoding broke the Railway healthcheck.** Railway injects its own `$PORT` and runs the healthcheck against it. Hardcoding `--port 8000` in an exec-form `CMD` made uvicorn bind to a port the healthcheck wasn't dialing. Resolution: shell-form `CMD` with `${PORT:-8000}` to expand the variable correctly, plus an explicit `PORT=8000` in Railway Variables.
 
-After all three fixes, the live URL replays the full public eval JSON with **26,372 correct, 1,242 incorrect, 0 skipped** — identical to local results — at 3.8 seconds round-trip on a 27,614-prior request.
+After all three fixes, the live URL replays the full public eval JSON with **26,379 correct, 1,235 incorrect, 0 skipped** — identical to local results — at 3.8 seconds round-trip on a 27,614-prior request.
 
 ## Methods Comparison Phase
 
@@ -127,7 +127,7 @@ While building Method 3, a signature mismatch surfaced between the harness contr
 |---|---|---|---|
 | case_grouped | 0.9364 | 0.9363 | −0.02 |
 | curr_desc_holdout | 0.9214 | 0.9215 | +0.01 |
-| prior_desc_holdout | 0.9246 | 0.9243 | −0.03 |
+| prior_desc_holdout | 0.9246 | 0.9242 | −0.03 |
 | both_desc_holdout | 0.9256 | 0.9257 | +0.01 |
 
 **Why rejected.** The refined key fragmented the canonical pair-stat table. Many mammography bins fell below `n ≥ 10`, so the canonical layer fired less often and made more mistakes when it did fire. Override accuracy on `both_desc_holdout` dropped from 0.9614 (v1) to 0.9548 (M1). Adding key dimensions is the wrong direction when the canonical layer is volume-limited.

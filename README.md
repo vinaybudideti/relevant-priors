@@ -4,7 +4,7 @@ A production-grade FastAPI service that classifies whether each prior radiology 
 
 **Live endpoint**: `https://relevant-priors-production-8914.up.railway.app/predict`
 
-> **TL;DR** — POST cases (current study + prior studies) → get one `predicted_is_relevant: bool` per prior. Single batched request handles the full public eval (27,614 priors) in **~0.9s local / 3.8s over Railway** at **95.50% accuracy**, with **zero skipped predictions**. No LLM. No database. No Redis. Just a deterministic 3-layer cascade + scikit-learn.
+> **TL;DR** — POST cases (current study + prior studies) → get one `predicted_is_relevant: bool` per prior. Single batched request handles the full public eval (27,614 priors) in **~0.9s local / 3.8s over Railway** at **95.53% accuracy**, with **zero skipped predictions**. No LLM. No database. No Redis. Just a deterministic 3-layer cascade + scikit-learn.
 
 ---
 
@@ -34,14 +34,14 @@ A production-grade FastAPI service that classifies whether each prior radiology 
 
 | Metric                                      | Value                              |
 | ------------------------------------------- | ---------------------------------- |
-| Accuracy on full public replay (train+evaluate on full public)        | **95.50%**           |
+| Accuracy on full public replay (train+evaluate on full public)        | **95.53%**           |
 | Accuracy on case-grouped 5-seed cross-validation                      | **93.64%**           |
 | Total predictions returned                  | 27,614 / 27,614 (zero skips)       |
 | End-to-end inference time (full eval)       | **~0.9 s**                         |
 | Container start-up to ready                 | **~3 s**                           |
 | Image size                                  | ~270 MB (python:3.11-slim base)    |
 | External dependencies at runtime            | **None** (no DB, no Redis, no LLM) |
-| Test count                                  | 30 (27 unit + 3 cascade-integration; cascade tests skip until artifacts are trained)  |
+| Test count                                  | 40 (37 unit + 3 cascade-integration; cascade tests skip until artifacts are trained)  |
 | Lines of production code                    | ~590 across 10 modules             |
 
 ---
@@ -110,20 +110,20 @@ All numbers are mean across **5 deterministic seeds** on the public 996-case spl
 | Split type             | LR-only | Cascade   | Cascade lift |
 | ---------------------- | ------- | --------- | ------------ |
 | case-grouped           | 93.06%  | **93.64%**| +0.58 pp     |
-| current-desc holdout   | 91.94%  | 92.13%    | +0.19 pp     |
-| prior-desc holdout     | 92.32%  | 92.44%    | +0.12 pp     |
-| both-desc holdout      | 92.55%  | 92.57%    | +0.03 pp     |
+| current-desc holdout   | 91.97%  | 92.14%    | +0.17 pp     |
+| prior-desc holdout     | 92.33%  | 92.46%    | +0.13 pp     |
+| both-desc holdout      | 92.55%  | 92.56%    | +0.01 pp     |
 
-The cascade lift is small but **positive on every split** (it's not just adding noise). On the public-as-train, public-as-test scenario used by `scripts/replay_public.py`, the same code achieves **95.50%** because the pair-lookup tables have full coverage of the input.
+The cascade lift is small but **positive on every split** (it's not just adding noise). On the public-as-train, public-as-test scenario used by `scripts/replay_public.py`, the same code achieves **95.53%** because the pair-lookup tables have full coverage of the input.
 
 ### Reading the headline numbers
 
 This README quotes two distinct accuracy numbers that mean different things:
 
-- **95.50%** is the full-public replay metric. The model is trained on the full 996-case public split, then the same split is replayed against the live endpoint to verify the contract end-to-end. This is what the live URL produces and what the Highlights table reports.
+- **95.53%** is the full-public replay metric. The model is trained on the full 996-case public split, then the same split is replayed against the live endpoint to verify the contract end-to-end. This is what the live URL produces and what the Highlights table reports.
 - **93.64%** is the case-grouped 5-seed cross-validation metric. The model is trained on 80% of cases and evaluated on the held-out 20%, repeated across five seeds. This is the more conservative estimate of generalization to unseen cases from the same distribution.
 
-The 1.86pp gap between the two is expected: pair-statistic lookups have full coverage when train and test overlap, which lifts the cascade above its true cross-validation accuracy. Neither number is a projection of private-split accuracy, which is unknown until evaluation.
+The 1.89pp gap between the two is expected: pair-statistic lookups have full coverage when train and test overlap, which lifts the cascade above its true cross-validation accuracy. Neither number is a projection of private-split accuracy, which is unknown until evaluation.
 
 ### Experiments and Findings
 
@@ -368,13 +368,13 @@ pytest tests/ -x -v
 Expected output, cold clone (before training artifacts):
 
 ```
-============================== 27 passed, 3 skipped in ~0.5s ==============================
+============================== 37 passed, 3 skipped in ~0.5s ==============================
 ```
 
 After running `python -m src.app.train --input data/relevant_priors_public.json --out artifacts/`:
 
 ```
-============================== 30 passed in ~0.7s ==============================
+============================== 40 passed in ~0.7s ==============================
 ```
 
 Test layout:
@@ -489,12 +489,12 @@ POSTing to http://localhost:8000/predict...
   Predictions returned: 27614
 
 Results:
-  Correct:   26372
-  Incorrect: 1242
+  Correct:   26379
+  Incorrect: 1235
   Skipped:   0 (count as incorrect)
-  Accuracy:  95.50%
+  Accuracy:  95.53%
 
-PASS: accuracy 95.50% with no skips
+PASS: accuracy 95.53% with no skips
 ```
 
 Gates: the script reports `FAIL` if accuracy < 92% or any predictions are skipped. Both gates pass against the cascade.
