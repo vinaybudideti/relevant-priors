@@ -1,0 +1,80 @@
+{
+  "method_name": "method_2_xr_implicit",
+  "method_description": "Detects view-pattern markers and infers modality=XRAY for descriptions without explicit XR tokens",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "splits": {
+    "case_grouped": {
+      "cascade_acc_mean": 0.9363470971920063,
+      "cascade_acc_std": 0.0030857406228949357,
+      "lr_only_acc_mean": 0.9306089083446023,
+      "lr_only_acc_std": 0.003970723247683953,
+      "canon_override_acc_mean": 0.9664805410882582,
+      "canon_override_acc_std": 0.004922674176539526,
+      "lift_vs_v1_pp": -0.01
+    },
+    "curr_desc_holdout": {
+      "cascade_acc_mean": 0.9212081563730676,
+      "cascade_acc_std": 0.014211932541961526,
+      "lr_only_acc_mean": 0.9196743811156931,
+      "lr_only_acc_std": 0.014403735386651292,
+      "canon_override_acc_mean": 0.9671185948649826,
+      "canon_override_acc_std": 0.01881071556190043,
+      "lift_vs_v1_pp": -0.02
+    },
+    "prior_desc_holdout": {
+      "cascade_acc_mean": 0.9248176885831338,
+      "cascade_acc_std": 0.00810453074186866,
+      "lr_only_acc_mean": 0.9232660845627916,
+      "lr_only_acc_std": 0.008123456494759606,
+      "canon_override_acc_mean": 0.971300311564278,
+      "canon_override_acc_std": 0.007902707481021776,
+      "lift_vs_v1_pp": 0.02
+    },
+    "both_desc_holdout": {
+      "cascade_acc_mean": 0.9256318622038509,
+      "cascade_acc_std": 0.006301218665424241,
+      "lr_only_acc_mean": 0.9254794759724833,
+      "lr_only_acc_std": 0.004594684177425572,
+      "canon_override_acc_mean": 0.964740591032724,
+      "canon_override_acc_std": 0.0068500566068839305,
+      "lift_vs_v1_pp": 0.0
+    }
+  },
+  "vs_v1_comparison": {
+    "case_grouped": {
+      "v1": 0.9364,
+      "method": 0.9363,
+      "delta_pp": -0.01
+    },
+    "curr_desc_holdout": {
+      "v1": 0.9214,
+      "method": 0.9212,
+      "delta_pp": -0.02
+    },
+    "prior_desc_holdout": {
+      "v1": 0.9246,
+      "method": 0.9248,
+      "delta_pp": 0.02
+    },
+    "both_desc_holdout": {
+      "v1": 0.9256,
+      "method": 0.9256,
+      "delta_pp": 0.0
+    }
+  },
+  "gates": {
+    "case_grouped_lift_ge_0.10pp": false,
+    "no_split_regresses_more_than_0.20pp": true,
+    "canon_override_acc_ge_0.95_all_splits": true,
+    "production_pytest_still_passes": true,
+    "method_unit_tests_pass": true
+  },
+  "all_gates_passed": false,
+  "ship_decision": "skip"
+}

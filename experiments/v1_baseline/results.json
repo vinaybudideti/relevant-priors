@@ -1,0 +1,76 @@
+{
+  "method_name": "v1_baseline",
+  "method_description": "Production v1 cascade. Reference numbers for all method comparisons. Uses src.app.normalize.canonical_key (modality | region | contrast).",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "splits": {
+    "case_grouped": {
+      "cascade_acc_mean": 0.9364143621214955,
+      "cascade_acc_std": 0.002936081909070223,
+      "lr_only_acc_mean": 0.9306089083446023,
+      "lr_only_acc_std": 0.003970723247683953,
+      "canon_override_acc_mean": 0.9679494758416702,
+      "canon_override_acc_std": 0.004381200141902891
+    },
+    "curr_desc_holdout": {
+      "cascade_acc_mean": 0.9213675039949566,
+      "cascade_acc_std": 0.01424616710884589,
+      "lr_only_acc_mean": 0.9196743811156931,
+      "lr_only_acc_std": 0.014403735386651292,
+      "canon_override_acc_mean": 0.9654065169966615,
+      "canon_override_acc_std": 0.017991588019960616
+    },
+    "prior_desc_holdout": {
+      "cascade_acc_mean": 0.9245835549487202,
+      "cascade_acc_std": 0.008251679520272039,
+      "lr_only_acc_mean": 0.9232660845627916,
+      "lr_only_acc_std": 0.008123456494759606,
+      "canon_override_acc_mean": 0.968931887113032,
+      "canon_override_acc_std": 0.009452049337261077
+    },
+    "both_desc_holdout": {
+      "cascade_acc_mean": 0.9256141337829812,
+      "cascade_acc_std": 0.00637257771066107,
+      "lr_only_acc_mean": 0.9254794759724833,
+      "lr_only_acc_std": 0.004594684177425572,
+      "canon_override_acc_mean": 0.9614455024919646,
+      "canon_override_acc_std": 0.005758670116393696
+    }
+  },
+  "vs_v1_comparison": {
+    "case_grouped": {
+      "v1": 0.9364143621214955,
+      "method": 0.9364143621214955,
+      "delta_pp": 0.0
+    },
+    "curr_desc_holdout": {
+      "v1": 0.9213675039949566,
+      "method": 0.9213675039949566,
+      "delta_pp": 0.0
+    },
+    "prior_desc_holdout": {
+      "v1": 0.9245835549487202,
+      "method": 0.9245835549487202,
+      "delta_pp": 0.0
+    },
+    "both_desc_holdout": {
+      "v1": 0.9256141337829812,
+      "method": 0.9256141337829812,
+      "delta_pp": 0.0
+    }
+  },
+  "gates": {
+    "case_grouped_lift_ge_0.10pp": true,
+    "no_split_regresses_more_than_0.20pp": true,
+    "canon_override_acc_ge_0.95_all_splits": true,
+    "production_pytest_still_passes": true,
+    "method_unit_tests_pass": true
+  },
+  "all_gates_passed": true,
+  "ship_decision": "baseline"
+}
